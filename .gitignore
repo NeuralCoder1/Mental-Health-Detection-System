@@ -1,0 +1,47 @@
+# --------------------
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual env
+venv/
+.env/
+
+# --------------------
+# Mac / system junk
+.DS_Store
+._*
+__MACOSX/
+
+# --------------------
+# Jupyter / training artifacts
+modeltrainingcode+dataset/
+*.ipynb
+*.csv
+
+# --------------------
+# Uploaded audio files
+uploads/
+*.wav
+
+# --------------------
+# Render / temp
+*.log
+
+# --------------------
+# Editor
+.vscode/
+.idea/
+
+# --------------------
+# Explicitly KEEP model for Render
+!text_model/
+!text_model/**
+
+# --------------------
+# Optional: large ML leftovers (if any appear later)
+*.pt
+*.pth
+*.ckpt

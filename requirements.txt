@@ -1,0 +1,16 @@
+--index-url https://download.pytorch.org/whl/cpu
+
+torch
+torchvision
+torchaudio
+
+transformers
+safetensors
+pandas
+numpy
+datasets
+scikit-learn
+flask
+flask-cors
+librosa
+soundfile

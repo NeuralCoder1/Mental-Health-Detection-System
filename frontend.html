@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>AI Mental Health Detection</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #eef2f8;
+            padding: 20px;
+            margin: 0;
+        }
+
+        .container {
+            max-width: 700px;
+            margin: auto;
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 0 15px rgba(0, 0, 0, 0.1);
+        }
+
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        textarea {
+            width: 96%;
+            height: 120px;
+            padding: 12px;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            resize: none;
+            margin-bottom: 15px;
+        }
+
+        button {
+            padding: 10px 18px;
+            margin: 5px;
+            border: none;
+            background: #0056ff;
+            color: white;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 15px;
+        }
+
+        button:hover {
+            background: #003dcc;
+        }
+
+        #recordBtn {
+            background: #ff3e3e;
+        }
+
+        #recordBtn.recording {
+            background: #d60000;
+        }
+
+        .result-box {
+            background: #f4f7ff;
+            padding: 15px;
+            border-radius: 6px;
+            margin-top: 20px;
+            border-left: 4px solid #0056ff;
+            display: none;
+        }
+
+        pre {
+            background: #efefef;
+            padding: 10px;
+            border-radius: 5px;
+            white-space: pre-wrap;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+        <h2>AI Mental Health Detection</h2>
+
+        <label><b>Enter your statement</b></label>
+        <textarea id="userText" placeholder="Type something..."></textarea>
+
+        <button onclick="predictText()">Text Analysis</button>
+        <button id="recordBtn" onclick="toggleRecording()">🎤 Record Voice</button>
+        <button onclick="predictBoth()">Analyze Both</button>
+
+        <div class="result-box" id="resultBox"></div>
+    </div>
+
+
+    <script>
+        let mediaRecorder;
+        let audioChunks = [];
+        let isRecording = false;
+        let lastRecordedBlob = null;
+
+
+        // ---------------------- TEXT PREDICTION -------------------------
+        async function predictText() {
+            const text = document.getElementById("userText").value.trim();
+            if (!text) return alert("Enter some text first!");
+
+            const res = await fetch("http://127.0.0.1:8000/predict_text", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ text })
+            });
+
+            const data = await res.json();
+            showResult(data);
+        }
+
+
+        // ---------------------- AUDIO RECORDING -------------------------
+        async function toggleRecording() {
+            const recordBtn = document.getElementById("recordBtn");
+
+            if (!isRecording) {
+                let stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                mediaRecorder = new MediaRecorder(stream);
+
+                mediaRecorder.ondataavailable = e => audioChunks.push(e.data);
+
+                mediaRecorder.onstop = () => {
+                    const audioBlob = new Blob(audioChunks, { type: "audio/wav" });
+                    audioChunks = [];
+
+                    lastRecordedBlob = audioBlob;  // ⬅ store for fusion
+
+                    sendAudioForPrediction(audioBlob);
+                };
+
+                mediaRecorder.start();
+                isRecording = true;
+                recordBtn.classList.add("recording");
+                recordBtn.textContent = "⏹ Stop Recording";
+
+            } else {
+                mediaRecorder.stop();
+                isRecording = false;
+                recordBtn.classList.remove("recording");
+                recordBtn.textContent = "🎤 Record Voice";
+            }
+        }
+
+
+        // ---------------------- AUDIO PREDICTION -------------------------
+        async function sendAudioForPrediction(blob) {
+            const formData = new FormData();
+            formData.append("file", blob, "audio.wav");
+
+            const res = await fetch("http://127.0.0.1:8000/predict_audio", {
+                method: "POST",
+                body: formData
+            });
+
+            const data = await res.json();
+            showResult(data);
+        }
+
+
+        // ---------------------- FUSION (TEXT + AUDIO) -------------------------
+        async function predictBoth() {
+            const text = document.getElementById("userText").value.trim();
+            if (!text) return alert("Type something first!");
+
+            if (!lastRecordedBlob) return alert("Record audio first!");
+
+            const formData = new FormData();
+            formData.append("text", text);
+            formData.append("file", lastRecordedBlob, "audio.wav");
+
+            const res = await fetch("http://127.0.0.1:8000/predict_both", {
+                method: "POST",
+                body: formData
+            });
+
+            const data = await res.json();
+            showResult(data);
+        }
+
+
+        // ---------------------- SHOW RESULT -------------------------
+        function showResult(data) {
+            const box = document.getElementById("resultBox");
+            box.style.display = "block";
+
+            let html = `<h3>🧠 Mental Health Analysis</h3>`;
+
+            /* ---------------- TEXT RESULT ---------------- */
+            if (data.text_prediction) {
+                html += `<p><b>📝 Text Prediction:</b> ${data.text_prediction}</p>`;
+            }
+
+            /* ---------------- RISK SCORE ---------------- */
+            if (data.final_risk_score !== undefined) {
+                html += `
+            <p><b>⚠️ Risk Score:</b> ${data.final_risk_score.toFixed(2)}%</p>
+            <p><b>🚦 Risk Category:</b> ${data.risk_category}</p>
+        `;
+            } else {
+                html += `
+            <p><b>⚠️ Risk Score:</b> Calculated from text only</p>
+            <p><b>🚦 Risk Category:</b> Based on text</p>
+        `;
+            }
+
+            /* ---------------- AUDIO FEATURES ---------------- */
+            if (data.audio_features) {
+                html += `
+            <h4>🎙️ Audio Features</h4>
+            <ul>
+                <li><b>Energy:</b> ${data.audio_features.energy}</li>
+                <li><b>Pause Ratio:</b> ${data.audio_features.pause_ratio}</li>
+                <li><b>Speaking Rate:</b> ${data.audio_features.onset_rate}</li>
+            </ul>
+        `;
+            }
+
+            /* ---------------- EMOTION PROBABILITIES ---------------- */
+            if (data.label_probabilities) {
+                html += `<h4>📊 Emotion Probabilities</h4><ul>`;
+
+                const sorted = Object.entries(data.label_probabilities)
+                    .sort((a, b) => b[1] - a[1]);
+
+                for (const [label, prob] of sorted) {
+                    html += `<li><b>${label}:</b> ${(prob * 100).toFixed(2)}%</li>`;
+                }
+
+                html += `</ul>`;
+            }
+
+            box.innerHTML = html;
+        }
+    </script>
+
+</body>
+
+</html>
